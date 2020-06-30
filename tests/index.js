@@ -58,14 +58,14 @@ async function assertData(t, firestore, path, value) {
 }
 
 test('merge: iterative', wrapper(async ({t, projectId, firestore, app}) => {
-    // Empty migration
-    await fireway.migrate({
-        projectId,
-        path: __dirname + '/emptyMigration',
-        app
-    });
-    let snapshot = await firestore.collection('fireway').get();
-    t.equal(snapshot.size, 0);
+    // // Empty migration
+    // await fireway.migrate({
+    //     projectId,
+    //     path: __dirname + '/emptyMigration',
+    //     app
+    // });
+    // let snapshot = await firestore.collection('fireway').get();
+    // t.equal(snapshot.size, 0);
 
     // First migration
     await fireway.migrate({
