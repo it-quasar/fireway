@@ -6,6 +6,7 @@ const md5 = require('md5');
 const admin = require('firebase-admin');
 const {Firestore, DocumentReference, CollectionReference, WriteBatch, FieldValue, FieldPath} = require('@google-cloud/firestore');
 const semver = require('semver');
+const jsonColorizer = require('json-colorizer');
 
 const readFile = util.promisify(fs.readFile);
 const readdir = util.promisify(fs.readdir);
@@ -15,46 +16,68 @@ const exists = util.promisify(fs.exists);
 function proxyWritableMethods(dryrun, stats) {
     dryrun && console.log('Making firestore read-only');
 
-    const ogCommit_ = WriteBatch.prototype.commit_;
-    WriteBatch.prototype.commit_ = async function() {
-        if (dryrun) return [];
-        return ogCommit_.apply(this, Array.from(arguments));
+    const ogCommit = WriteBatch.prototype.commit;
+    WriteBatch.prototype.commit = function() {
+        return dryrun ? Promise.resolve() : ogCommit.apply(this, Array.from(arguments));
     };
 
     // Add logs for each item
-    const ogCreate = DocumentReference.prototype.create;
-    DocumentReference.prototype.create = function(doc) {
-        stats.created += 1;
-        console.log('Creating', JSON.stringify(doc));
-        return ogCreate.call(this, doc);
+    const ogBatchSet = WriteBatch.prototype.set;
+    WriteBatch.prototype.set = function(ref, doc, opts = {}) {
+        stats.set += 1;
+        console.log(opts.merge ? 'Merging' : 'Setting', ref.path, jsonColorizer(doc, {pretty: true}));
+        if (!dryrun) {
+           ogBatchSet.apply(this, Array.from(arguments));
+        }
+        return this;
+    };
+
+    const ogBatchUpdate = WriteBatch.prototype.update;
+    WriteBatch.prototype.update = function(ref, doc) {
+        stats.updated += 1;
+        console.log('Updating', ref.path, jsonColorizer(doc, {pretty: true}));
+        if (!dryrun) {
+            ogBatchUpdate.apply(this, Array.from(arguments));
+        }
+        return this;
+    };
+
+    const ogBatchDelete = WriteBatch.prototype.delete;
+    WriteBatch.prototype.delete = function(ref) {
+        stats.deleted += 1;
+        console.log('Deleting', ref.path);
+        if (!dryrun) {
+            ogBatchDelete.apply(this, Array.from(arguments));
+        }
+        return this;
     };
 
     const ogSet = DocumentReference.prototype.set;
     DocumentReference.prototype.set = function(doc, opts = {}) {
         stats.set += 1;
-        console.log(opts.merge ? 'Merging' : 'Setting', this.path, JSON.stringify(doc));
-        return ogSet.call(this, doc, opts);
+        console.log(opts.merge ? 'Merging' : 'Setting', this.path, jsonColorizer(doc, {pretty: true}));
+        return dryrun ? Promise.resolve() : ogSet.apply(this, Array.from(arguments));
     };
 
     const ogUpdate = DocumentReference.prototype.update;
     DocumentReference.prototype.update = function(doc) {
         stats.updated += 1;
-        console.log('Updating', this.path, JSON.stringify(doc));
-        return ogUpdate.call(this, doc);
+        console.log('Updating', this.path, jsonColorizer(doc, {pretty: true}));
+        return dryrun ? Promise.resolve() : ogUpdate.apply(this, Array.from(arguments));
     };
 
     const ogDelete = DocumentReference.prototype.delete;
     DocumentReference.prototype.delete = function() {
         stats.deleted += 1;
         console.log('Deleting', this.path);
-        return ogDelete.call(this);
+        return dryrun ? Promise.resolve() : ogDelete.apply(this, Array.from(arguments));
     };
-    
+
     const ogAdd = CollectionReference.prototype.add;
-    CollectionReference.prototype.add = function(doc) {
+    CollectionReference.prototype.add = function(data) {
         stats.added += 1;
-        console.log('Adding', JSON.stringify(doc));
-        return ogAdd.call(this, doc);
+        console.log('Adding', jsonColorizer(data, {pretty: true}));
+        return dryrun ? Promise.resolve(this.doc().ref) : ogAdd.apply(this, Array.from(arguments));
     };
 }
 

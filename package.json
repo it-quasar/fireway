@@ -32,6 +32,7 @@
   "dependencies": {
     "@google-cloud/firestore": "^2.2.4",
     "firebase-admin": "^8.3.0",
+    "json-colorizer": "^2.2.2",
     "md5": "^2.2.1",
     "sade": "^1.6.1",
     "semver": "^6.3.0"
