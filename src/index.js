@@ -16,9 +16,9 @@ const exists = util.promisify(fs.exists);
 function proxyWritableMethods(dryrun, stats) {
     dryrun && console.log('Making firestore read-only');
 
-    const ogCommit = WriteBatch.prototype.commit;
+    const ogBatchCommit = WriteBatch.prototype.commit;
     WriteBatch.prototype.commit = function() {
-        return dryrun ? Promise.resolve() : ogCommit.apply(this, Array.from(arguments));
+        return dryrun ? Promise.resolve() : ogBatchCommit.apply(this, Array.from(arguments));
     };
 
     // Add logs for each item
@@ -28,6 +28,16 @@ function proxyWritableMethods(dryrun, stats) {
         console.log(opts.merge ? 'Merging' : 'Setting', ref.path, jsonColorizer(doc, {pretty: true}));
         if (!dryrun) {
            ogBatchSet.apply(this, Array.from(arguments));
+        }
+        return this;
+    };
+
+    const ogBatchCreate = WriteBatch.prototype.create;
+    WriteBatch.prototype.create = function(ref, doc) {
+        stats.created += 1;
+        console.log('Creating', ref.path, jsonColorizer(doc, {pretty: true}));
+        if (!dryrun) {
+            ogBatchCreate.apply(this, Array.from(arguments));
         }
         return this;
     };
@@ -57,6 +67,13 @@ function proxyWritableMethods(dryrun, stats) {
         stats.set += 1;
         console.log(opts.merge ? 'Merging' : 'Setting', this.path, jsonColorizer(doc, {pretty: true}));
         return dryrun ? Promise.resolve() : ogSet.apply(this, Array.from(arguments));
+    };
+
+    const ogCreate = DocumentReference.prototype.create;
+    DocumentReference.prototype.create = function(doc, opts = {}) {
+        stats.created += 1;
+        console.log('Creating', this.path, jsonColorizer(doc, {pretty: true}));
+        return dryrun ? Promise.resolve() : ogCreate.apply(this, Array.from(arguments));
     };
 
     const ogUpdate = DocumentReference.prototype.update;
